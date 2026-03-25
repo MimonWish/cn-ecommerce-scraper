@@ -1,0 +1,24 @@
+{
+  "skill_name": "ecommerce-scraper",
+  "description": "拼多多/1688电商商品爬虫 - 从店铺URL爬取所有商品清单和详情，输出为CSV/Excel文件",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "爬取拼多多店铺 https://you.kuajingpinduoduo.com/shop-detail/shopDetail?shopId=123456 的所有商品，输出为 CSV 文件",
+      "expected_output": "生成包含商品列表的CSV文件，包含商品名称、价格、销量等信息",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "爬取1688店铺 https://xxx.1688.com/page/creditlist.htm 的商品列表",
+      "expected_output": "生成包含1688店铺商品的CSV文件",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "帮我从 https://you.kuajingpinduoduo.com/shop-detail/shopDetail?shopId=123456 店铺爬取所有商品，然后获取每个商品的详情，最后导出为 Excel",
+      "expected_output": "生成包含完整商品详情的CSV文件",
+      "files": []
+    }
+  ]
+}
