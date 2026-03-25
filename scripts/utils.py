@@ -30,6 +30,11 @@ class Product:
     category: str = ""
     shop_id: str = ""
     crawl_time: str = ""
+    # 新增字段
+    attrs: str = ""          # 商品属性 (JSON字符串)
+    packaging: str = ""      # 包装信息
+    detail_html: str = ""     # 详情页HTML
+    detail_images: str = ""    # 详情页图片
 
     def to_dict(self) -> Dict[str, str]:
         return asdict(self)
@@ -39,14 +44,38 @@ class Product:
             self.shop_name, self.shop_url, self.platform, self.product_id,
             self.product_name, self.product_url, self.price, self.sales,
             self.stock, self.images, self.description, self.category,
-            self.shop_id, self.crawl_time
+            self.shop_id, self.crawl_time, self.attrs, self.packaging,
+            self.detail_html, self.detail_images
         ]
+
+    def to_json(self) -> Dict:
+        """转换为JSON兼容的字典"""
+        return {
+            "shop_name": self.shop_name,
+            "shop_url": self.shop_url,
+            "platform": self.platform,
+            "product_id": self.product_id,
+            "product_name": self.product_name,
+            "product_url": self.product_url,
+            "price": self.price,
+            "sales": self.sales,
+            "stock": self.stock,
+            "images": self.images,
+            "description": self.description,
+            "category": self.category,
+            "shop_id": self.shop_id,
+            "crawl_time": self.crawl_time,
+            "attrs": self.attrs,
+            "packaging": self.packaging,
+            "detail_images": self.detail_images,
+        }
 
 
 CSV_HEADERS = [
     "shop_name", "shop_url", "platform", "product_id", "product_name",
     "product_url", "price", "sales", "stock", "images", "description",
-    "category", "shop_id", "crawl_time"
+    "category", "shop_id", "crawl_time", "attrs", "packaging",
+    "detail_html", "detail_images"
 ]
 
 
@@ -235,3 +264,129 @@ def detect_product_url_type(url: str) -> str:
     if 'jd.com' in url:
         return "jd"
     return "unknown"
+
+
+def download_image(url: str, session: requests.Session = None, timeout: int = 30) -> Optional[bytes]:
+    """下载图片并返回二进制内容"""
+    if not url:
+        return None
+    try:
+        if session:
+            response = session.get(url, timeout=timeout)
+        else:
+            import requests as req
+            response = req.get(url, timeout=timeout)
+        response.raise_for_status()
+        return response.content
+    except Exception:
+        return None
+
+
+def download_images_to_folder(urls: List[str], folder_path: str, session: requests.Session = None, prefix: str = "") -> List[str]:
+    """
+    下载多个图片到指定文件夹
+
+    Args:
+        urls: 图片URL列表
+        folder_path: 保存文件夹路径
+        session: requests Session
+        prefix: 文件名前缀
+
+    Returns:
+        保存的文件路径列表
+    """
+    saved_paths = []
+    Path(folder_path).mkdir(parents=True, exist_ok=True)
+
+    for i, url in enumerate(urls):
+        if not url:
+            continue
+        content = download_image(url, session)
+        if content:
+            # 提取文件扩展名
+            ext = '.jpg'
+            if '.png' in url.lower():
+                ext = '.png'
+            elif '.gif' in url.lower():
+                ext = '.gif'
+            elif '.webp' in url.lower():
+                ext = '.webp'
+
+            filename = f"{prefix}{i+1:03d}{ext}" if prefix else f"image_{i+1:03d}{ext}"
+            filepath = Path(folder_path) / filename
+            try:
+                with open(filepath, 'wb') as f:
+                    f.write(content)
+                saved_paths.append(str(filepath))
+            except Exception:
+                pass
+
+    return saved_paths
+
+
+def save_product_folder(product: Product, base_dir: str, session: requests.Session = None) -> str:
+    """
+    保存商品详情到独立文件夹
+
+    Args:
+        product: 商品数据
+        base_dir: 基础目录
+        session: requests Session
+
+    Returns:
+        保存的文件夹路径
+    """
+    # 创建以商品名命名的文件夹
+    folder_name = sanitize_filename(product.product_name) or f"product_{product.product_id}"
+    folder_path = Path(base_dir) / folder_name
+    folder_path.mkdir(parents=True, exist_ok=True)
+
+    # 1. 保存商品信息JSON
+    info_file = folder_path / "product_info.json"
+    with open(info_file, 'w', encoding='utf-8') as f:
+        json.dump(product.to_json(), f, ensure_ascii=False, indent=2)
+
+    # 2. 保存商品主图
+    if product.images:
+        main_urls = [url.strip() for url in product.images.split(',') if url.strip()]
+        if main_urls:
+            download_images_to_folder(main_urls, str(folder_path / "images"), session, "main_")
+
+    # 3. 保存详情页图片
+    if product.detail_images:
+        detail_urls = [url.strip() for url in product.detail_images.split(',') if url.strip()]
+        if detail_urls:
+            download_images_to_folder(detail_urls, str(folder_path / "detail_images"), session, "detail_")
+
+    # 4. 保存详情描述到文本文件
+    if product.description:
+        desc_file = folder_path / "description.txt"
+        with open(desc_file, 'w', encoding='utf-8') as f:
+            f.write(product.description)
+
+    # 5. 保存属性信息
+    if product.attrs:
+        attrs_file = folder_path / "attributes.json"
+        try:
+            # 如果是JSON字符串则保存为JSON，否则保存为文本
+            attrs_data = json.loads(product.attrs)
+            with open(attrs_file, 'w', encoding='utf-8') as f:
+                json.dump(attrs_data, f, ensure_ascii=False, indent=2)
+        except json.JSONDecodeError:
+            attrs_file = folder_path / "attributes.txt"
+            with open(attrs_file, 'w', encoding='utf-8') as f:
+                f.write(product.attrs)
+
+    # 6. 保存包装信息
+    if product.packaging:
+        pkg_file = folder_path / "packaging.txt"
+        with open(pkg_file, 'w', encoding='utf-8') as f:
+            f.write(product.packaging)
+
+    # 7. 保存详情页HTML（可选，用于调试）
+    if product.detail_html:
+        html_file = folder_path / "detail.html"
+        with open(html_file, 'w', encoding='utf-8') as f:
+            f.write(product.detail_html)
+
+    return str(folder_path)
